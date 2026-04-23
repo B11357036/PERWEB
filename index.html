@@ -25,6 +25,7 @@
             color: var(--text-main);
             line-height: 1.6;
             scroll-behavior: smooth;
+            transition: background-color 0.3s ease;
         }
 
         /* 導覽列 */
@@ -294,16 +295,19 @@
 <div class="container">
     <h2 class="section-title" id="ai-assistant">✨ Gemini AI 智慧助手</h2>
     
-    <!-- API Key 使用者設定區 -->
-    <div class="key-settings-panel">
-        <h3 style="margin-top:0; color: var(--gemini-sparkle);"><i class="fas fa-user-shield"></i> 個人 AI 金鑰設定</h3>
-        <p style="font-size: 0.9rem; color: #666;">為了讓大家都能使用 AI，請輸入您個人的 Gemini API Key。金鑰將僅儲存在您的瀏覽器中。</p>
-        <div class="key-input-group">
-            <input type="password" id="userApiKeyInput" class="ai-input" style="margin-top:0" placeholder="在此貼上您的 API Key (AIzaSy...)">
-            <button class="btn btn-save-key" style="margin-top:0" onclick="saveUserKey()">儲存金鑰</button>
-            <button class="btn" style="margin-top:0; background:#eee; color:#333;" onclick="clearUserKey()">清除</button>
+    <!-- AI 狀態面板 -->
+    <div id="aiModePanel" class="key-settings-panel">
+        <h3 id="modeTitle" style="margin-top:0; color: var(--gemini-sparkle);"><i class="fas fa-robot"></i> 正在檢測 AI 模式...</h3>
+        <p id="modeDesc" style="font-size: 0.9rem; color: #666;">系統將自動優先使用瀏覽器內建 AI，無需金鑰。</p>
+        
+        <div id="keyInputArea" style="display:none;">
+            <div class="key-input-group">
+                <input type="password" id="userApiKeyInput" class="ai-input" style="margin-top:0" placeholder="在此貼上您的 API Key (AIzaSy...)">
+                <button class="btn btn-save-key" style="margin-top:0" onclick="saveUserKey()">儲存金鑰</button>
+                <button class="btn" style="margin-top:0; background:#eee; color:#333;" onclick="clearUserKey()">清除</button>
+            </div>
         </div>
-        <p id="keyStatusDisplay" style="font-size: 0.8rem; font-weight: bold;"></p>
+        <p id="keyStatusDisplay" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px;"></p>
     </div>
 
     <div class="grid">
@@ -331,25 +335,53 @@
 </footer>
 
 <script>
-    // 頁面載入時嘗試讀取金鑰
-    window.onload = function() {
+    let aiSession = null;
+    let useLocalAI = false;
+
+    // 頁面載入時檢測環境
+    window.onload = async function() {
+        await detectAIMode();
         const savedKey = localStorage.getItem('gemini_user_key');
         if (savedKey) {
             document.getElementById('userApiKeyInput').value = savedKey;
-            updateKeyStatus(true);
-        } else {
+            if(!useLocalAI) updateKeyStatus(true);
+        } else if(!useLocalAI) {
             updateKeyStatus(false);
         }
     };
 
+    async function detectAIMode() {
+        const title = document.getElementById('modeTitle');
+        const desc = document.getElementById('modeDesc');
+        const keyArea = document.getElementById('keyInputArea');
+
+        // 檢查 Chrome 內建 AI (Window.ai)
+        if (window.ai && window.ai.canCreateTextSession) {
+            const canCreate = await window.ai.canCreateTextSession();
+            if (canCreate === "readily") {
+                useLocalAI = true;
+                title.innerHTML = '<i class="fas fa-bolt"></i> 已啟用瀏覽器內建 AI';
+                desc.innerText = "您的瀏覽器支援本地運算，無需 API Key，且完全免費且私密。";
+                keyArea.style.display = "none";
+                return;
+            }
+        }
+
+        // 不支援本地 AI，切換回 API Key 模式
+        useLocalAI = false;
+        title.innerHTML = '<i class="fas fa-key"></i> Gemini API 模式';
+        desc.innerText = "您的瀏覽器暫不支援本地 AI，請輸入個人 API Key 以啟動助手。";
+        keyArea.style.display = "block";
+    }
+
     function saveUserKey() {
         const key = document.getElementById('userApiKeyInput').value.trim();
-        if (key.startsWith("AIzaSy")) {
+        if (key && key.length > 10) {
             localStorage.setItem('gemini_user_key', key);
-            showToast("✅ 金鑰已成功儲存至您的瀏覽器！");
+            showToast("✅ 金鑰已儲存！");
             updateKeyStatus(true);
         } else {
-            showToast("❌ 金鑰格式似乎不正確，請重新確認。");
+            showToast("❌ 請輸入有效的金鑰內容。");
         }
     }
 
@@ -364,25 +396,40 @@
         const statusEl = document.getElementById('keyStatusDisplay');
         if (isSet) {
             statusEl.style.color = "#2e7d32";
-            statusEl.innerHTML = '<i class="fas fa-check-circle"></i> 狀態：已連線，您可以開始使用 AI 功能。';
+            statusEl.innerHTML = '<i class="fas fa-check-circle"></i> 狀態：金鑰已就緒。';
         } else {
             statusEl.style.color = "#d32f2f";
-            statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> 狀態：未設定，請先輸入 API Key 並儲存。';
+            statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> 狀態：等待金鑰輸入。';
         }
     }
 
     async function callGemini(prompt, systemPrompt) {
+        // 優先使用本地 AI
+        if (useLocalAI) {
+            try {
+                if (!aiSession) {
+                    aiSession = await window.ai.createTextSession();
+                }
+                return await aiSession.prompt(`系統指令：${systemPrompt}\n\n使用者請求：${prompt}`);
+            } catch (e) {
+                console.error("Local AI Error:", e);
+                return "❌ 本地 AI 執行失敗，請嘗試使用 API Key 模式。";
+            }
+        }
+
+        // 使用 API Key 模式
         const activeApiKey = localStorage.getItem('gemini_user_key');
-        
         if (!activeApiKey) {
-            showToast("⚠️ 請先在上方設定您的 API Key！");
+            showToast("⚠️ 請先設定您的 API Key！");
             return null;
         }
         
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeApiKey}`;
         const payload = {
-            contents: [{ parts: [{ text: prompt }] }],
-            systemInstruction: { parts: [{ text: systemPrompt }] }
+            contents: [{ 
+                role: "user",
+                parts: [{ text: `系統指令：${systemPrompt}\n\n使用者請求：${prompt}` }] 
+            }]
         };
 
         try {
@@ -392,17 +439,10 @@
                 body: JSON.stringify(payload)
             });
             const result = await response.json();
-            
-            if (result.error) {
-                if (result.error.message.includes("API key not valid")) {
-                    return "❌ API Key 無效，請確認金鑰是否正確複製。";
-                }
-                return "❌ 發生錯誤：" + result.error.message;
-            }
-            
-            return result.candidates?.[0]?.content?.parts?.[0]?.text || "無回傳內容。";
+            if (!response.ok) return `❌ 錯誤：${result.error?.message || "連線失敗"}`;
+            return result.candidates?.[0]?.content?.parts?.[0]?.text || "AI 沒有回傳內容。";
         } catch (e) {
-            return "❌ 連線異常，請檢查網路。";
+            return "❌ 連線失敗，請檢查網路。";
         }
     }
 
@@ -413,7 +453,7 @@
         const loading = document.getElementById('ideaLoading');
         loading.style.display = 'block';
         resBox.style.display = 'none';
-        const response = await callGemini(`關鍵字：${keywords}`, "你是工管系教授，請提議三個專題方向。");
+        const response = await callGemini(keywords, "你是一位專業的工業管理系教授，請根據關鍵字提議三個創新的專題研究方向。");
         loading.style.display = 'none';
         if (response) { resBox.innerText = response; resBox.style.display = 'block'; }
     }
@@ -425,7 +465,7 @@
         const loading = document.getElementById('summaryLoading');
         loading.style.display = 'block';
         resBox.style.display = 'none';
-        const response = await callGemini(`內容：${content}`, "請總結這段文字的重點。");
+        const response = await callGemini(content, "請將以下文字總結為三個核心重點。");
         loading.style.display = 'none';
         if (response) { resBox.innerText = response; resBox.style.display = 'block'; }
     }
