@@ -170,11 +170,19 @@
             gap: 5px;
             background: #f0edff;
             color: var(--gemini-sparkle);
-            padding: 4px 12px;
+            padding: 6px 16px;
             border-radius: 20px;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             font-weight: 600;
             margin-bottom: 10px;
+            cursor: pointer;
+            transition: 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .ai-badge:hover {
+            border-color: var(--gemini-sparkle);
+            background: #e5e0ff;
         }
 
         .ai-input {
@@ -288,11 +296,12 @@
 <div class="container">
     <h2 class="section-title" id="ai-assistant">✨ Gemini AI 智慧助手</h2>
     
-    <!-- AI 狀態提示 -->
+    <!-- AI 狀態提示 (點擊可重設 Key) -->
     <div style="text-align: center; margin-bottom: 20px;">
-        <span id="aiStatus" class="ai-badge" style="background: #e8f5e9; color: #2e7d32;">
-            <i class="fas fa-check-circle"></i> AI 服務已就緒
+        <span id="aiStatus" class="ai-badge" onclick="promptApiKey()">
+            <i class="fas fa-key"></i> <span id="statusText">AI 助手已就緒 (點擊重設 Key)</span>
         </span>
+        <p style="font-size: 0.75rem; color: #888; margin-top: 5px;">* 若出現 Invalid API Key，請點擊上方重新貼上 *</p>
     </div>
 
     <div class="grid">
@@ -354,26 +363,31 @@
 </footer>
 
 <script>
-    /**
-     * 重要：請在此處填入您的 Gemini API Key
-     * 您需要從 Google AI Studio (https://aistudio.google.com/) 取得金鑰
-     * 並將金鑰貼在下方雙引號中，例如：const activeApiKey = "AIzaSy...";
-     */
-    const activeApiKey = ""; // <--- 在這裡貼上您的 API Key
+    // 您可以選擇在此填入 Key，或在網頁上點擊狀態欄輸入
+    let activeApiKey = ""; 
+
+    function promptApiKey() {
+        const input = window.prompt("請輸入您的 Gemini API Key：", activeApiKey);
+        if (input !== null) {
+            activeApiKey = input.trim(); // 自動過濾前後空格
+            showToast("API Key 已更新，可以再次嘗試！");
+        }
+    }
 
     async function callGemini(prompt, systemPrompt) {
-        if (!activeApiKey || activeApiKey === "") {
-            showToast("錯誤：尚未在程式碼中設定 API Key。");
-            return "請在腳本中設定 API Key 以啟用此功能。";
+        if (!activeApiKey || activeApiKey.trim() === "") {
+            showToast("⚠️ 尚未設定 API Key，請點擊上方狀態欄設定。");
+            return "請先設定正確的金鑰。";
         }
         
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${activeApiKey}`;
+        // 使用目前最新的穩定模型 (1.5 Flash)，確保相容性
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeApiKey}`;
         const payload = {
             contents: [{ parts: [{ text: prompt }] }],
             systemInstruction: { parts: [{ text: systemPrompt }] }
         };
 
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 3; i++) { // 減少重試次數，加快錯誤回報
             try {
                 const response = await fetch(url, {
                     method: 'POST',
@@ -383,13 +397,17 @@
                 const result = await response.json();
                 
                 if (result.error) {
+                    console.error("API Error:", result.error);
+                    if (result.error.message.includes("API key not valid")) {
+                        return "❌ 連線失敗：API Key 無效。請點擊上方『狀態欄』重新貼上正確的金鑰。";
+                    }
                     return "AI 呼叫失敗：" + result.error.message;
                 }
                 
                 return result.candidates?.[0]?.content?.parts?.[0]?.text || "無回傳內容。";
             } catch (e) {
-                if (i === 4) return "連線失敗，請檢查網路。";
-                await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+                if (i === 2) return "連線發生問題，請檢查網路環境。";
+                await new Promise(r => setTimeout(r, 1000));
             }
         }
     }
