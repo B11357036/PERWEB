@@ -195,11 +195,12 @@
             font-size: 0.9rem;
             display: none;
             white-space: pre-line;
+            text-align: left;
         }
 
         .loading-spinner {
             display: none;
-            margin: 10px auto;
+            margin: 15px auto;
             width: 30px;
             height: 30px;
             border: 3px solid rgba(142, 117, 255, 0.3);
@@ -235,12 +236,14 @@
             bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
-            background: #333;
+            background: rgba(0,0,0,0.8);
             color: white;
             padding: 12px 24px;
             border-radius: 50px;
             display: none;
             z-index: 2000;
+            font-size: 0.9rem;
+            white-space: nowrap;
         }
 
         footer {
@@ -277,12 +280,11 @@
         <a href="#resources" class="btn">查看資源連結</a>
     </div>
     <div class="profile-wrapper">
-        <img src="100515.jpg" alt="[施奕岑的照片]" class="profile-img" onerror="this.src='https://via.placeholder.com/320x400?text=Profile+Photo'">
+        <img src="100515.jpg" alt="施奕岑的照片" class="profile-img" onerror="this.src='https://via.placeholder.com/320x400?text=Profile+Photo'">
     </div>
 </section>
 
 <div class="container">
-    <!-- AI 助手區 -->
     <h2 class="section-title" id="ai-assistant">✨ Gemini AI 智慧助手</h2>
     <div class="grid">
         <div class="card">
@@ -303,30 +305,27 @@
         </div>
     </div>
 
-    <!-- 交作業區 -->
     <h2 class="section-title" id="homework" style="margin-top: 80px;">作業繳交區</h2>
     <div class="grid">
         <div class="card">
             <h3>📑 課程週報繳交</h3>
-            <input type="file" style="margin-top: 10px;">
-            <button class="btn" style="width: 100%;" onclick="showToast('作業已成功上傳！')">確認提交</button>
+            <input type="file" id="file1" style="margin-top: 10px;">
+            <button class="btn" style="width: 100%;" onclick="handleFileUpload('file1')">確認提交</button>
         </div>
         <div class="card">
             <h3>📂 專題進度上傳</h3>
-            <input type="file" style="margin-top: 10px;">
-            <button class="btn" style="width: 100%;" onclick="showToast('進度已更新！')">更新資料</button>
+            <input type="file" id="file2" style="margin-top: 10px;">
+            <button class="btn" style="width: 100%;" onclick="handleFileUpload('file2')">更新資料</button>
         </div>
     </div>
 
-    <!-- 點名系統 -->
     <h2 class="section-title" id="checkin" style="margin-top: 80px;">智慧點名系統</h2>
     <div style="max-width: 500px; margin: 0 auto;" class="card">
         <p>請輸入簽到代碼：</p>
-        <input type="text" class="attendance-input" placeholder="例如：1234">
-        <button class="btn" style="width:100%;" onclick="showToast('簽到完成！\n姓名：施奕岑')">確認簽到</button>
+        <input type="text" id="checkinCode" class="attendance-input" placeholder="例如：1234">
+        <button class="btn" style="width:100%;" onclick="handleCheckin()">確認簽到</button>
     </div>
 
-    <!-- 資源連結區 -->
     <h2 class="section-title" id="resources" style="margin-top: 80px;">產學與開發資源</h2>
     <div class="card" style="text-align: center; max-width: 800px; margin: 0 auto;">
         <p>點擊下方按鈕前往相關連結：</p>
@@ -334,8 +333,8 @@
             <a href="https://colab.research.google.com/" target="_blank" class="btn btn-colab">
                 <i class="fab fa-google"></i> Google Colab
             </a>
-            <!-- 採用相對路徑，解決瀏覽器禁止 file:/// 的安全攔截問題 -->
-            <a href="colab.html" target="_blank" class="btn btn-center">
+            <!-- 在 GitHub 環境中，請務必確保 colab.html 檔案名稱的大小寫與此連結完全一致 -->
+            <a href="colab.html" class="btn btn-center">
                 <i class="fas fa-university"></i> 產學合作中心官網
             </a>
         </div>
@@ -350,52 +349,71 @@
     const apiKey = ""; 
 
     async function callGemini(prompt, systemPrompt) {
+        if (!apiKey) return "錯誤：尚未設定 API Key。";
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
         const payload = {
             contents: [{ parts: [{ text: prompt }] }],
             systemInstruction: { parts: [{ text: systemPrompt }] }
         };
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const result = await response.json();
-            return result.candidates?.[0]?.content?.parts?.[0]?.text;
-        } catch (e) {
-            return "AI 暫時無法回應。";
+        for (let i = 0; i < 5; i++) {
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                return result.candidates?.[0]?.content?.parts?.[0]?.text || "無回傳內容。";
+            } catch (e) {
+                if (i === 4) return "AI 連線失敗。";
+                await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+            }
         }
     }
 
     async function generateIdeas() {
         const keywords = document.getElementById('topicKeywords').value;
-        if (!keywords) return;
+        if (!keywords) { showToast("請輸入關鍵字！"); return; }
         const resBox = document.getElementById('ideaResponse');
-        document.getElementById('ideaLoading').style.display = 'block';
+        const loading = document.getElementById('ideaLoading');
+        loading.style.display = 'block';
         resBox.style.display = 'none';
-        const response = await callGemini(`關鍵字：${keywords}`, "提議3個工業管理專題方向");
-        document.getElementById('ideaLoading').style.display = 'none';
+        const response = await callGemini(`關鍵字：${keywords}`, "你是工管系教授，請提議三個專題方向。");
+        loading.style.display = 'none';
         resBox.innerText = response;
         resBox.style.display = 'block';
     }
 
     async function summarizeReport() {
         const content = document.getElementById('reportContent').value;
-        if (!content) return;
+        if (!content) { showToast("請輸入內容！"); return; }
         const resBox = document.getElementById('summaryResponse');
-        document.getElementById('summaryLoading').style.display = 'block';
+        const loading = document.getElementById('summaryLoading');
+        loading.style.display = 'block';
         resBox.style.display = 'none';
-        const response = await callGemini(`內容：${content}`, "學術報告重點摘要");
-        document.getElementById('summaryLoading').style.display = 'none';
+        const response = await callGemini(`內容：${content}`, "請總結這段文字的重點。");
+        loading.style.display = 'none';
         resBox.innerText = response;
         resBox.style.display = 'block';
     }
 
+    function handleFileUpload(id) {
+        const fileInput = document.getElementById(id);
+        if (fileInput.files.length === 0) showToast("請選擇檔案！");
+        else showToast("檔案「" + fileInput.files[0].name + "」已上傳！");
+    }
+
+    function handleCheckin() {
+        const code = document.getElementById('checkinCode').value;
+        if (!code) showToast("請輸入代碼！");
+        else showToast("簽到成功！學生：施奕岑");
+    }
+
     function showToast(msg) {
         const t = document.getElementById('toast');
-        t.innerText = msg; t.style.display = 'block';
-        setTimeout(() => t.style.display = 'none', 3000);
+        t.innerText = msg;
+        t.style.display = 'block';
+        setTimeout(() => t.style.display = 'none', 4000);
     }
 </script>
 
