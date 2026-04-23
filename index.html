@@ -144,16 +144,6 @@
             box-shadow: 0 8px 25px rgba(0,0,0,0.1);
         }
 
-        /* AI 設定區塊樣式 */
-        .ai-config-box {
-            background: #fff8e1;
-            border: 1px dashed var(--colab-orange);
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 40px;
-            text-align: center;
-        }
-
         .btn {
             background: var(--primary-navy);
             color: white;
@@ -298,15 +288,11 @@
 <div class="container">
     <h2 class="section-title" id="ai-assistant">✨ Gemini AI 智慧助手</h2>
     
-    <!-- GitHub 安全啟動區塊 -->
-    <div class="ai-config-box">
-        <h4><i class="fas fa-key"></i> 啟動 AI 功能</h4>
-        <p style="font-size: 0.9rem; color: #666;">為確保安全，請輸入您的 Gemini API Key 以啟動助手功能：</p>
-        <div style="display: flex; gap: 10px; justify-content: center; max-width: 500px; margin: 0 auto;">
-            <input type="password" id="userApiKey" class="ai-input" style="margin-top:0;" placeholder="請貼上您的 API Key">
-            <button class="btn" style="margin-top:0;" onclick="saveKey()">儲存並啟動</button>
-        </div>
-        <p id="keyStatus" style="font-size: 0.8rem; margin-top: 10px; color: var(--npust-green); display: none;">✅ Key 已載入，AI 助手已就緒！</p>
+    <!-- AI 狀態提示 -->
+    <div style="text-align: center; margin-bottom: 20px;">
+        <span id="aiStatus" class="ai-badge" style="background: #e8f5e9; color: #2e7d32;">
+            <i class="fas fa-check-circle"></i> AI 服務已就緒
+        </span>
     </div>
 
     <div class="grid">
@@ -368,32 +354,16 @@
 </footer>
 
 <script>
-    // 從瀏覽器快取讀取已儲存的 Key
-    let activeApiKey = localStorage.getItem('gemini_api_key') || "";
-
-    window.onload = () => {
-        if (activeApiKey) {
-            document.getElementById('userApiKey').value = activeApiKey;
-            document.getElementById('keyStatus').style.display = 'block';
-        }
-    };
-
-    function saveKey() {
-        const inputKey = document.getElementById('userApiKey').value.trim();
-        if (inputKey) {
-            activeApiKey = inputKey;
-            localStorage.setItem('gemini_api_key', inputKey);
-            document.getElementById('keyStatus').style.display = 'block';
-            showToast("API Key 已儲存並啟用！");
-        } else {
-            showToast("請輸入有效金鑰");
-        }
-    }
+    /**
+     * 注意：請在此處填入您的 Gemini API Key
+     * 將 Key 寫在這裡後，GitHub Pages 上的使用者就能直接使用 AI 功能
+     */
+    const activeApiKey = ""; // 請在此引號內貼上您的 API Key
 
     async function callGemini(prompt, systemPrompt) {
         if (!activeApiKey) {
-            showToast("請先在上方輸入並儲存 API Key！");
-            return null;
+            showToast("錯誤：尚未在程式碼中設定 API Key。");
+            return "請在腳本中設定 API Key 以啟用此功能。";
         }
         
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${activeApiKey}`;
@@ -410,10 +380,14 @@
                     body: JSON.stringify(payload)
                 });
                 const result = await response.json();
-                if (result.error) throw new Error(result.error.message);
+                
+                if (result.error) {
+                    return "AI 呼叫失敗：" + result.error.message;
+                }
+                
                 return result.candidates?.[0]?.content?.parts?.[0]?.text || "無回傳內容。";
             } catch (e) {
-                if (i === 4) return "連線失敗：" + e.message;
+                if (i === 4) return "連線失敗，請檢查網路。";
                 await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
             }
         }
