@@ -144,6 +144,16 @@
             box-shadow: 0 8px 25px rgba(0,0,0,0.1);
         }
 
+        /* AI 設定區塊樣式 */
+        .ai-config-box {
+            background: #fff8e1;
+            border: 1px dashed var(--colab-orange);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
         .btn {
             background: var(--primary-navy);
             color: white;
@@ -184,6 +194,7 @@
             border-radius: 8px;
             margin-top: 10px;
             font-size: 0.95rem;
+            box-sizing: border-box;
         }
 
         .ai-response {
@@ -215,13 +226,12 @@
             background: linear-gradient(135deg, #6e45e2 0%, #88d3ce 100%);
             border: none;
             color: white;
+            width: 100%;
         }
-        .btn-ai:hover { opacity: 0.9; transform: scale(1.02); }
+        .btn-ai:hover { opacity: 0.9; transform: scale(1.01); }
 
-        /* 特殊按鈕樣式 */
         .btn-colab { background: var(--colab-orange); }
-        --npust-green: #2d6a4f;
-        .btn-center { background: var(--npust-green); }
+        .btn-center { background: #2d6a4f; }
 
         .attendance-input {
             width: 100%;
@@ -287,12 +297,24 @@
 
 <div class="container">
     <h2 class="section-title" id="ai-assistant">✨ Gemini AI 智慧助手</h2>
+    
+    <!-- GitHub 安全啟動區塊 -->
+    <div class="ai-config-box">
+        <h4><i class="fas fa-key"></i> 啟動 AI 功能</h4>
+        <p style="font-size: 0.9rem; color: #666;">為確保安全，請輸入您的 Gemini API Key 以啟動助手功能：</p>
+        <div style="display: flex; gap: 10px; justify-content: center; max-width: 500px; margin: 0 auto;">
+            <input type="password" id="userApiKey" class="ai-input" style="margin-top:0;" placeholder="請貼上您的 API Key">
+            <button class="btn" style="margin-top:0;" onclick="saveKey()">儲存並啟動</button>
+        </div>
+        <p id="keyStatus" style="font-size: 0.8rem; margin-top: 10px; color: var(--npust-green); display: none;">✅ Key 已載入，AI 助手已就緒！</p>
+    </div>
+
     <div class="grid">
         <div class="card">
             <div class="ai-badge"><i class="fas fa-magic"></i> AI 專題導師</div>
             <h3>專題方向建議</h3>
             <input type="text" id="topicKeywords" class="ai-input" placeholder="例如：智慧製造">
-            <button class="btn btn-ai" style="width: 100%;" onclick="generateIdeas()">✨ 生成構思</button>
+            <button class="btn btn-ai" onclick="generateIdeas()">✨ 生成構思</button>
             <div id="ideaLoading" class="loading-spinner"></div>
             <div id="ideaResponse" class="ai-response"></div>
         </div>
@@ -300,7 +322,7 @@
             <div class="ai-badge"><i class="fas fa-bolt"></i> AI 摘要專家</div>
             <h3>報告重點摘要</h3>
             <textarea id="reportContent" class="ai-input" style="height: 100px;" placeholder="在此貼上內容..."></textarea>
-            <button class="btn btn-ai" style="width: 100%;" onclick="summarizeReport()">✨ 快速總結</button>
+            <button class="btn btn-ai" onclick="summarizeReport()">✨ 快速總結</button>
             <div id="summaryLoading" class="loading-spinner"></div>
             <div id="summaryResponse" class="ai-response"></div>
         </div>
@@ -334,12 +356,7 @@
             <a href="https://colab.research.google.com/" target="_blank" class="btn btn-colab">
                 <i class="fab fa-google"></i> Google Colab
             </a>
-            <!-- 
-                GitHub Pages 專用路徑建議：
-                1. 確保 colab.html 與 index.html 在同一個 Repository 的根目錄
-                2. 連結請使用相對路徑，不加任何前綴（如 colab.html）
-            -->
-            <a href="Colab.html" class="btn btn-center">
+            <a href="./colab.html" class="btn btn-center">
                 <i class="fas fa-university"></i> 產學合作中心官網
             </a>
         </div>
@@ -351,15 +368,40 @@
 </footer>
 
 <script>
-    const apiKey = ""; 
+    // 從瀏覽器快取讀取已儲存的 Key
+    let activeApiKey = localStorage.getItem('gemini_api_key') || "";
+
+    window.onload = () => {
+        if (activeApiKey) {
+            document.getElementById('userApiKey').value = activeApiKey;
+            document.getElementById('keyStatus').style.display = 'block';
+        }
+    };
+
+    function saveKey() {
+        const inputKey = document.getElementById('userApiKey').value.trim();
+        if (inputKey) {
+            activeApiKey = inputKey;
+            localStorage.setItem('gemini_api_key', inputKey);
+            document.getElementById('keyStatus').style.display = 'block';
+            showToast("API Key 已儲存並啟用！");
+        } else {
+            showToast("請輸入有效金鑰");
+        }
+    }
 
     async function callGemini(prompt, systemPrompt) {
-        if (!apiKey) return "錯誤：尚未設定 API Key。";
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        if (!activeApiKey) {
+            showToast("請先在上方輸入並儲存 API Key！");
+            return null;
+        }
+        
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${activeApiKey}`;
         const payload = {
             contents: [{ parts: [{ text: prompt }] }],
             systemInstruction: { parts: [{ text: systemPrompt }] }
         };
+
         for (let i = 0; i < 5; i++) {
             try {
                 const response = await fetch(url, {
@@ -368,9 +410,10 @@
                     body: JSON.stringify(payload)
                 });
                 const result = await response.json();
+                if (result.error) throw new Error(result.error.message);
                 return result.candidates?.[0]?.content?.parts?.[0]?.text || "無回傳內容。";
             } catch (e) {
-                if (i === 4) return "AI 連線失敗。";
+                if (i === 4) return "連線失敗：" + e.message;
                 await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
             }
         }
@@ -379,27 +422,39 @@
     async function generateIdeas() {
         const keywords = document.getElementById('topicKeywords').value;
         if (!keywords) { showToast("請輸入關鍵字！"); return; }
+        
         const resBox = document.getElementById('ideaResponse');
         const loading = document.getElementById('ideaLoading');
+        
         loading.style.display = 'block';
         resBox.style.display = 'none';
+        
         const response = await callGemini(`關鍵字：${keywords}`, "你是工管系教授，請提議三個專題方向。");
+        
         loading.style.display = 'none';
-        resBox.innerText = response;
-        resBox.style.display = 'block';
+        if (response) {
+            resBox.innerText = response;
+            resBox.style.display = 'block';
+        }
     }
 
     async function summarizeReport() {
         const content = document.getElementById('reportContent').value;
         if (!content) { showToast("請輸入內容！"); return; }
+        
         const resBox = document.getElementById('summaryResponse');
         const loading = document.getElementById('summaryLoading');
+        
         loading.style.display = 'block';
         resBox.style.display = 'none';
+        
         const response = await callGemini(`內容：${content}`, "請總結這段文字的重點。");
+        
         loading.style.display = 'none';
-        resBox.innerText = response;
-        resBox.style.display = 'block';
+        if (response) {
+            resBox.innerText = response;
+            resBox.style.display = 'block';
+        }
     }
 
     function handleFileUpload(id) {
