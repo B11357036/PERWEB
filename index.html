@@ -355,13 +355,14 @@
 
 <script>
     /**
-     * 注意：請在此處填入您的 Gemini API Key
-     * 將 Key 寫在這裡後，GitHub Pages 上的使用者就能直接使用 AI 功能
+     * 重要：請在此處填入您的 Gemini API Key
+     * 您需要從 Google AI Studio (https://aistudio.google.com/) 取得金鑰
+     * 並將金鑰貼在下方雙引號中，例如：const activeApiKey = "AIzaSy...";
      */
-    const activeApiKey = ""; // 請在此引號內貼上您的 API Key
+    const activeApiKey = ""; // <--- 在這裡貼上您的 API Key
 
     async function callGemini(prompt, systemPrompt) {
-        if (!activeApiKey) {
+        if (!activeApiKey || activeApiKey === "") {
             showToast("錯誤：尚未在程式碼中設定 API Key。");
             return "請在腳本中設定 API Key 以啟用此功能。";
         }
